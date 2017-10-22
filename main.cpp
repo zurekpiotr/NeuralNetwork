@@ -41,15 +41,14 @@ int main()
     sf::CircleShape shape(100.f);
     shape.setFillColor(sf::Color::Green);
 
-    network net(2, 4,1);
+    network net({2,15,4,1});
 
     sf::Image image;
     image.create(400, 400, sf::Color(128, 128, 128, 128));
     sf::Texture texture;
     sf::Sprite sprite;
-    long double lasterror = 1;
-    long double waga = 1;
-    int testid = 0;
+
+
     while (window.isOpen())
     {
         sf::Event event;
@@ -57,11 +56,6 @@ int main()
         {
             if (event.type == sf::Event::Closed)
                 window.close();
-            if(event.type == sf::Event::KeyPressed)
-            {
-                waga *=2;
-            }
-
         }
 
 
@@ -71,20 +65,20 @@ int main()
             {
                 net.set_input(vector<long double> {(i-200), (j-200)});
                 net.make();
-                image.setPixel(i,j, sf::Color(net.output[0].value*255, net.output[0].value*255,net.output[0].value*255 ));
+                image.setPixel(i,j, sf::Color(net.get_output()[0].value*255, net.get_output()[0].value*255,net.get_output()[0].value*255 ));
             }
         }
-        //net.debug_write();
+
 
         long double act_err = 0;
-        for(int i = 0 ; i < 100000 ; i ++)
+        for(int i = 0 ; i < 10000 ; i ++)
         {
             act_err = net.learn(tests);
         }
 
         cout<<act_err<<" "<<"t="<<net.max_test<<endl;
         net.write_weight();
-        net.debug_write();
+
 
         texture.loadFromImage(image);
         sprite.setTexture(texture);
