@@ -1,8 +1,6 @@
 #include <vector>
 #include <math.h>
 #include <iostream>
-#include "egde.hpp"
-#include "neuron.hpp"
 
 #define LD long double
 
@@ -30,27 +28,29 @@ class edge
 public:
     neuron *from , *to;
     long double W = 0;
+    long double last_grad= 0;
     long double gradient = 0;
     void update_gradient();
 
     void update_W(long double);
 
 };
+
 int amount = 0;
+
 class neuron
 {
 public:
     long double (*_f)(long double);
     int id;
-
     vector<edge*> incoming;
-
+    long double u = 0;
     long double value=1;
     long double back_value;
 
     neuron(long double (*f)(long double) = [](long double in)->long double {return activation_functions::sigm(in,1);} )
     {
-        id = ++amount;
+        id = amount++;
         _f = f;
         value = 1;
     }
@@ -62,6 +62,7 @@ public:
         {
             ans+=incoming[i]->from->value * incoming[i]->W;
         }
+        u = ans;
         value = _f(ans);
     }
 
@@ -71,12 +72,13 @@ public:
 
         for(int i = 0 ; i < incoming.size() ; i ++)
         {
-            incoming[i]->from->back_value+=back_value * incoming[i]->W;
+            incoming[i]->from->back_value += back_value * incoming[i]->W;
         }
     }
 };
 void edge::update_gradient()
 {
+    //cout<<"  "<<from->id<<" "<<from->value*to->back_value<<" "<<to->id<<endl;
     gradient+=from->value*to->back_value;
 }
 void edge::update_W(long double n = 0.1)
@@ -120,11 +122,11 @@ public:
 
         E.reserve(edges+4);
 
-        for(i = 1 ; i < neurons.size() ; i++)
+        for(i = 1 ; i < neurons.size()-1 ; i++)
         {
-            for(int j = 0 ; j < layers[i].size() ; j++)
+            for(int j = 1 ; j < layers[i].size() ; j++)
             {
-                for(int k = 1 ; k < layers[i-1].size() ; k++)
+                for(int k = 0 ; k < layers[i-1].size() ; k++)
                 {
                     edge temp;
                     temp.from = &layers[i-1][k];
@@ -133,6 +135,18 @@ public:
                     E.push_back(temp);
                     layers[i][j].incoming.push_back(&E[E.size() - 1]);
                 }
+            }
+        }
+        for(int j = 0 ; j < layers[i].size() ; j++)
+        {
+            for(int k = 0 ; k < layers[i-1].size() ; k++)
+            {
+                edge temp;
+                temp.from = &layers[i-1][k];
+                temp.to   = &layers[i  ][j];
+                temp.W = randd();
+                E.push_back(temp);
+                layers[i][j].incoming.push_back(&E[E.size() - 1]);
             }
         }
 
@@ -144,15 +158,116 @@ public:
 
     }
 
+    long double last_error = 100000000;
 
-    void set_input(vector<long double> in)
+    long double learn(vector<pair<vector<LD> , vector<LD>> > &tests , long double coefficient)
+    {
+        long double err= 0;
+        clear();
+
+
+        for(int i = 0 ; i < tests.size() ; i++)
+        {
+            forall_neurons( [](neuron & y)-> void {y.back_value = 0;});
+
+            set_input(tests[i].first);
+            make();
+            err += set_back_input(tests[i].second);
+            propagate();
+            grad();
+        }
+        last_error = err;
+
+        for(int i = 0 ; i < E.size() ; i++)
+        {
+            E[i].gradient += 0.95*E[i].last_grad;
+        }
+
+        update_weight(coefficient);
+
+        err = 0;
+        for(int i = 0 ; i < tests.size() ; i++)
+        {
+            set_input(tests[i].first);
+            make();
+            err += set_back_input(tests[i].second);
+        }
+
+        if(err > last_error* 1.1)
+        {
+            update_weight(-1.0*coefficient);
+            for(int i = 0 ; i < E.size() ; i++)
+            {
+                E[i].gradient -= 0.95*E[i].last_grad;
+            }
+            update_weight(coefficient);
+        }
+
+
+        for(int i = 0 ; i < E.size() ; i++)
+        {
+            E[i].last_grad = E[i].gradient;
+        }
+
+
+        err = 0;
+        for(int i = 0 ; i < tests.size() ; i++)
+        {
+            set_input(tests[i].first);
+            make();
+            err += set_back_input(tests[i].second);
+        }
+
+        return err;
+
+
+
+    }
+
+    vector<long double> calculate_for_input(vector<long double> &in)
+    {
+        vector<long double> out;
+        set_input(in);
+        make();
+        for(int i = 0 ; i < layers.back().size() ; i++)
+        {
+            out.push_back(layers.back()[i].value);
+        }
+        return out;
+    }
+    vector<long double> calculate_for_input(vector<long double> in)
+    {
+        vector<long double> out;
+        set_input(in);
+        make();
+        for(int i = 0 ; i < layers.back().size() ; i++)
+        {
+            out.push_back(layers.back()[i].value);
+        }
+        return out;
+    }
+    void write_weight()const
+    {
+        for(int i = 0 ; i < E.size() ; i++)
+        {
+            cout<<E[i].W<<" ";
+            if(i%6 == 5)cout<<endl;
+            //cout<<E[i].from->id<<" ("<<E[i].W<<" "<<E[i].gradient<<") "<<E[i].to->id<<endl;
+        }
+        cout<<endl;
+    }
+
+//private :
+
+    void set_input(vector<long double> &in)
     {
         for(int i = 1 ; i <= in.size() ; i++)
         {
             layers[0][i].value = in[i-1];
         }
     }
-    long double set_back_input(vector<long double> out)
+
+    long double set_back_input(vector<long double>& out)
     {
         long double err = 0;
         for(int i = 0 ; i < layers.back().size() ; i++)
@@ -162,11 +277,13 @@ public:
         }
         return err;
     }
+
+
     void make()
     {
         for(int i = 1 ; i < layers.size()-1 ; i++)
         {
-            for(int j = 1 ; j < layers[i].size() ; j++)
+            for(int j = 0 ; j < layers[i].size() ; j++)
             {
                 layers[i][j].update_value();
             }
@@ -181,9 +298,14 @@ public:
 
     void propagate()
     {
-        for(int i = layers.size()-1 ; i >0 ; i--)
+        for(int j = 0 ; j < layers.back().size() ; j++)
         {
-            for(int j = 0 ; j < layers[i].size() ; j++)
+            layers.back()[j].update_back_value();
+        }
+
+        for(int i = layers.size()-2 ; i >= 0 ; i--)
+        {
+            for(int j = 1 ; j < layers[i].size() ; j++)
             {
                 layers[i][j].update_back_value();
             }
@@ -211,6 +333,7 @@ public:
     {
         for(int i = 0 ; i < layers.size() ; i++)
         {
+            //cout<<"    >|"<<layers.size()<<endl;
             for(int j = 0 ; j < layers[i].size() ; j++)
             {
                 t ( layers[i][j] );
@@ -219,26 +342,8 @@ public:
         }
     }
 
-    int max_test = 100;
-    long double learn(vector<pair<vector<LD> , vector<LD>> > &tests)
-    {
-        long double err= 0;
-        clear();
-        for(int i = 0 ; i < tests.size() && i < max_test; i++)
-        {
-            forall_neurons( [](neuron & y)-> void{y.back_value = 0;});
 
-            set_input(tests[i].first);
-            make();
-            err += set_back_input(tests[i].second);
-            propagate();
-            grad();
-        }
-        update_weight(1);
-        if(err < 0.01)max_test++;
-        return err;
 
-    }
     void clear()
     {
         for(int i = 0 ; i < E.size() ; i++)
@@ -247,46 +352,4 @@ public:
         }
 
     }
-    void write_weight()
-    {
-        for(int i = 0 ; i < E.size() ; i++)
-        {
-            cout<<E[i].W<<" ";
-            if(i%4 == 3)cout<<endl;
-        }
-        cout<<endl;
-    }
-
-    vector<neuron> & get_output()
-    {
-        return layers.back();
-    }
-
-   /* void debug_write()
-    {
-        for(int i = 0 ; i < output.size() ; i++)
-        {
-            cout<<output[i].id<<endl;
-            for(int j = 0 ; j < output[i].incoming.size() ; j++)
-            {
-                cout<<"   "<<output[i].incoming[j]->from->id<<"  "<<output[i].incoming[j]->from->value<<"\t W="<<output[i].incoming[j]->W<<endl;
-            }
-        }
-        for(int i = 0 ; i < hidden.size() ; i++)
-        {
-            cout<<hidden[i].id<<endl;
-            for(int j = 0 ; j < hidden[i].incoming.size() ; j++)
-            {
-                cout<<"   "<<hidden[i].incoming[j]->from->id<<"  "<<hidden[i].incoming[j]->from->value<<"\t W="<<hidden[i].incoming[j]->W<<endl;
-            }
-        }
-
-
-    }*/
-
-
-    //void set_back_input;
-
-
-
 };

@@ -4,7 +4,7 @@
 #include <time.h>
 #include <math.h>
 #include "Network.hpp"
-
+#include <cstdlib>
 
 using namespace std;
 
@@ -20,28 +20,46 @@ void add_test(vector<LD> in  , vector<LD> out)
 int main()
 {
     ios_base::sync_with_stdio(0);
-    add_test({0 , 0} , {0});
-    for(int i = 1 ; i < 10 ; i ++)
-    {
-        add_test({i , i} , {0});
-        add_test({-i , -i} , {0});
-    }
-    add_test({100 , -100} , {1});
-    add_test({-100 , 100} , {1});
-    add_test({200 , 0} , {1});
-    add_test({0 , -200} , {1});
-    add_test({-200 , 0} , {1});
-    add_test({0 , 200} , {1});
-
-
-
-
     srand(time(0));
-    sf::RenderWindow window(sf::VideoMode(400, 400), "SFML works!");
-    sf::CircleShape shape(100.f);
-    shape.setFillColor(sf::Color::Green);
+   /* for(int i = 0 ; i < 40000 ; i ++)
+    {
+        int x = (rand()%400)-200;
+        int y = (rand()%400)-200;
+        cout<<x<<" "<<y<<endl;
+        if( y > 100 )
+        {
+            add_test({x,y} , {1});
+        }
+        else
+        {
+            add_test({x,y} , {0});
+        }
+    }
+    */
+    for(int x = -200 ; x < 201 ; x++)
+    {
+        for(int y = -200 ; y < 201 ; y++)
+        {
+            if( y > 100 )
+            {
+                add_test({x,y} , {1});
+            }
+            else
+            {
+                add_test({x,y} , {0});
+            }
+        }
+    }
 
-    network net({2,15,4,1});
+    network net({2,1});
+
+
+
+
+    sf::RenderWindow window(sf::VideoMode(400, 400), "SFML works!");
+
+
+
 
     sf::Image image;
     image.create(400, 400, sf::Color(128, 128, 128, 128));
@@ -63,22 +81,22 @@ int main()
         {
             for(int j = 0 ; j < 400 ; j ++)
             {
-                net.set_input(vector<long double> {(i-200), (j-200)});
-                net.make();
-                image.setPixel(i,j, sf::Color(net.get_output()[0].value*255, net.get_output()[0].value*255,net.get_output()[0].value*255 ));
+                auto temp = net.calculate_for_input({i-200 , j-200});
+                image.setPixel(i,j, sf::Color(temp[0]*255, temp[0]*255,temp[0]*255 ));
             }
         }
 
 
         long double act_err = 0;
-        for(int i = 0 ; i < 10000 ; i ++)
+        for(int i = 0 ; i < 1 ; i ++)
         {
-            act_err = net.learn(tests);
+            act_err = net.learn(tests , 0.5);
         }
-
-        cout<<act_err<<" "<<"t="<<net.max_test<<endl;
         net.write_weight();
-
+        cout<<"E = "<<act_err<<endl;
+        /*cout<<"<----->"<<endl;
+        net.forall_neurons([](neuron & x)->void { cout<<x.value<<endl; });
+        cout<<"<-end->"<<endl;*/
 
         texture.loadFromImage(image);
         sprite.setTexture(texture);
